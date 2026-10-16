@@ -13,6 +13,11 @@ other reclaimable space, sorts it into **Safe** (regenerates on its own) and **R
 > **Made by Claude Opus 5.5.** This entire app was written by Anthropic's Claude Opus 5.5
 > (via Claude Code). Review the code before running it: it deletes files.
 
+## Download
+
+Grab **Tidal.zip** from the [latest release](../../releases/latest), unzip, and move `Tidal.app` to Applications.
+It is ad-hoc signed (not notarized), so on first launch right-click → Open.
+
 ## Build
 
 Requires macOS 27 and Xcode with the Swift toolchain.
@@ -32,3 +37,7 @@ for another app's caches is a one-entry pull request. Issues and PRs welcome.
 ## License
 
 MIT
+
+---
+
+<p align="center">Made by <b>0vyx</b><br><img src="Resources/0vyx-logo.png" height="36" alt="0vyx"></p>

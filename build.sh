@@ -2,11 +2,10 @@
 # Builds Tidal.app (interface + embedded agent) and optionally installs it.
 #   ./build.sh            build into ./build
 #   ./build.sh install    build, then copy to /Applications
+# Set DEVELOPER_DIR to pick a specific Xcode, e.g. DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer ./build.sh
 set -euo pipefail
 cd "${0:A:h}"
 
-export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-[[ -d $DEVELOPER_DIR ]] || unset DEVELOPER_DIR
 SWIFTC=(/usr/bin/xcrun swiftc -O -swift-version 5 -target arm64-apple-macosx27.0 -parse-as-library)
 
 OUT=build
@@ -21,6 +20,7 @@ echo "› interface"
 $SWIFTC -o $APP/Contents/MacOS/Tidal Shared/*.swift App/*.swift
 
 cp Resources/catalog.json $APP/Contents/Resources/
+cp Resources/0vyx-logo.png $APP/Contents/Resources/
 cp Resources/catalog.json $AGENT/Contents/Resources/
 cp Resources/Info.plist $APP/Contents/Info.plist
 cp Resources/Agent-Info.plist $AGENT/Contents/Info.plist

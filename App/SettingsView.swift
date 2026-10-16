@@ -70,6 +70,16 @@ struct SettingsView: View {
 
             Text("Catalog v\(store.engine.catalog.version) · \(store.engine.catalog.rules.count) rules · Tidal only touches locations it has explicit rules for.")
                 .font(.system(size: 10.5)).foregroundStyle(Theme.faint)
+
+            HStack(spacing: 8) {
+                Spacer()
+                Text("Made by").font(.system(size: 10.5)).foregroundStyle(Theme.faint)
+                if let url = Bundle.main.url(forResource: "0vyx-logo", withExtension: "png"), let img = NSImage(contentsOf: url) {
+                    Image(nsImage: img).resizable().interpolation(.high).scaledToFit().frame(height: 14)
+                }
+                Text("0vyx").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                Spacer()
+            }
         }
         .padding(26)
         .frame(width: 600)
