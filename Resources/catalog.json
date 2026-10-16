@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "signature": "unsigned-local",
+  "rules": [
+    { "id": "never.tidal", "title": "Tidal's own data", "pattern": "~/Library/Application Support/Tidal", "tier": "never", "category": "apps", "kind": "self" },
+    { "id": "never.keychains", "title": "Keychains", "pattern": "~/Library/Caches/com.apple.Safari.SafeBrowsing", "tier": "never", "category": "apps", "kind": "system" },
+
+    { "id": "dev.homebrew", "title": "Homebrew downloads", "pattern": "~/Library/Caches/Homebrew", "tier": "safe", "category": "developer", "kind": "devcache", "note": "Re-downloaded on demand." },
+    { "id": "dev.pip", "title": "pip cache", "pattern": "~/Library/Caches/pip", "tier": "safe", "category": "developer", "kind": "devcache" },
+    { "id": "dev.yarn", "title": "Yarn cache", "pattern": "~/Library/Caches/Yarn", "tier": "safe", "category": "developer", "kind": "devcache" },
+    { "id": "dev.cocoapods", "title": "CocoaPods cache", "pattern": "~/Library/Caches/CocoaPods", "tier": "safe", "category": "developer", "kind": "devcache" },
+    { "id": "dev.swiftpm", "title": "SwiftPM cache", "pattern": "~/Library/Caches/org.swift.swiftpm", "tier": "safe", "category": "developer", "kind": "devcache" },
+    { "id": "dev.playwright", "title": "Playwright browsers", "pattern": "~/Library/Caches/ms-playwright", "tier": "review", "category": "developer", "kind": "devcache", "note": "Large to re-download." },
+    { "id": "caches.apple", "title": "macOS caches", "pattern": "~/Library/Caches/com.apple.*", "tier": "review", "category": "system", "kind": "cache", "minSizeMB": 50, "note": "Apple caches regenerate, but some hold sync state. Offered, never automatic." },
+    { "id": "caches.cloudkit", "title": "CloudKit cache", "pattern": "~/Library/Caches/CloudKit", "tier": "never", "category": "system", "kind": "cache" },
+    { "id": "caches.user", "title": "App caches", "pattern": "~/Library/Caches/*", "tier": "safe", "category": "apps", "kind": "cache", "exclude": ["CloudKit", "FamilyCircle", "GeoServices", "com.apple.*", "Tidal*"], "capMB": 4096, "note": "Apps rebuild these on their own." },
+
+    { "id": "logs.crash", "title": "Crash reports", "pattern": "~/Library/Logs/DiagnosticReports/*", "tier": "safe", "category": "system", "kind": "crash", "minAgeDays": 3 },
+    { "id": "logs.user", "title": "App logs", "pattern": "~/Library/Logs/*", "tier": "safe", "category": "apps", "kind": "log", "exclude": ["DiagnosticReports", "Tidal*"] },
+
+    { "id": "dev.deriveddata", "title": "Xcode derived data", "pattern": "~/Library/Developer/Xcode/DerivedData/*", "tier": "safe", "category": "developer", "kind": "build", "note": "Rebuilt on the next build." },
+    { "id": "dev.xcode.previews", "title": "Xcode previews", "pattern": "~/Library/Developer/Xcode/UserData/Previews/*", "tier": "safe", "category": "developer", "kind": "build" },
+    { "id": "dev.devicesupport.ios", "title": "Old iOS device support", "pattern": "~/Library/Developer/Xcode/iOS DeviceSupport/*", "tier": "review", "category": "developer", "kind": "devicesupport", "minAgeDays": 30 },
+    { "id": "dev.devicesupport.watch", "title": "Old watchOS device support", "pattern": "~/Library/Developer/Xcode/watchOS DeviceSupport/*", "tier": "review", "category": "developer", "kind": "devicesupport", "minAgeDays": 30 },
+    { "id": "dev.archives", "title": "Xcode archives", "pattern": "~/Library/Developer/Xcode/Archives/*", "tier": "review", "category": "developer", "kind": "archive", "minAgeDays": 90 },
+    { "id": "dev.coresim.caches", "title": "Simulator caches", "pattern": "~/Library/Developer/CoreSimulator/Caches/*", "tier": "safe", "category": "developer", "kind": "devcache" },
+    { "id": "dev.npm", "title": "npm cache", "pattern": "~/.npm/_cacache", "tier": "safe", "category": "developer", "kind": "devcache" },
+    { "id": "dev.gradle", "title": "Gradle caches", "pattern": "~/.gradle/caches", "tier": "review", "category": "developer", "kind": "devcache" },
+    { "id": "dev.cache.dir", "title": "Tool caches", "pattern": "~/.cache/*", "tier": "review", "category": "developer", "kind": "devcache", "minSizeMB": 20 },
+
+    { "id": "backups.ios", "title": "iPhone & iPad backups", "pattern": "~/Library/Application Support/MobileSync/Backup/*", "tier": "review", "category": "backups", "kind": "backup", "minAgeDays": 30, "note": "Personal. Only you can decide." },
+
+    { "id": "trash.old", "title": "Old Trash items", "pattern": "~/.Trash/*", "tier": "safe", "category": "other", "kind": "trash", "minAgeDays": 30, "exclude": ["*.app"] },
+    { "id": "downloads.installers", "title": "Leftover installers", "pattern": "~/Downloads/*", "tier": "safe", "category": "personal", "kind": "installer", "extensions": ["dmg", "pkg", "mpkg", "iso", "xip"], "minAgeDays": 7 },
+    { "id": "downloads.archives", "title": "Old archives in Downloads", "pattern": "~/Downloads/*", "tier": "review", "category": "personal", "kind": "download", "extensions": ["zip", "tar", "gz", "tgz", "7z", "rar"], "minAgeDays": 60, "minSizeMB": 100 },
+
+    { "id": "leftover.support", "title": "Application Support", "pattern": "~/Library/Application Support/*", "tier": "review", "category": "apps", "kind": "leftover", "exclude": ["Tidal", "MobileSync", "com.apple.*", "AddressBook", "CallHistoryDB", "Knowledge"] },
+    { "id": "leftover.caches", "title": "Caches", "pattern": "~/Library/Caches/*", "tier": "safe", "category": "apps", "kind": "leftover", "exclude": ["com.apple.*", "CloudKit"] },
+    { "id": "leftover.logs", "title": "Logs", "pattern": "~/Library/Logs/*", "tier": "safe", "category": "apps", "kind": "leftover", "exclude": ["DiagnosticReports"] },
+    { "id": "leftover.prefs", "title": "Preferences", "pattern": "~/Library/Preferences/*.plist", "tier": "safe", "category": "apps", "kind": "leftover", "exclude": ["com.apple.*", ".GlobalPreferences*", "loginwindow*"] },
+    { "id": "leftover.state", "title": "Saved window state", "pattern": "~/Library/Saved Application State/*", "tier": "safe", "category": "apps", "kind": "leftover", "exclude": ["com.apple.*"] },
+    { "id": "leftover.http", "title": "HTTP storage", "pattern": "~/Library/HTTPStorages/*", "tier": "safe", "category": "apps", "kind": "leftover", "exclude": ["com.apple.*"] },
+    { "id": "leftover.webkit", "title": "Web data", "pattern": "~/Library/WebKit/*", "tier": "safe", "category": "apps", "kind": "leftover", "exclude": ["com.apple.*"] },
+    { "id": "leftover.cookies", "title": "Cookies", "pattern": "~/Library/Cookies/*", "tier": "safe", "category": "apps", "kind": "leftover", "exclude": ["com.apple.*", "Cookies.binarycookies"] },
+    { "id": "leftover.containers", "title": "Container", "pattern": "~/Library/Containers/*", "tier": "review", "category": "apps", "kind": "leftover", "exclude": ["com.apple.*"] },
+    { "id": "leftover.groups", "title": "Group container", "pattern": "~/Library/Group Containers/*", "tier": "review", "category": "apps", "kind": "leftover", "exclude": ["group.com.apple.*", "*.com.apple.*"] },
+    { "id": "leftover.scripts", "title": "Application scripts", "pattern": "~/Library/Application Scripts/*", "tier": "review", "category": "apps", "kind": "leftover", "exclude": ["com.apple.*"] },
+    { "id": "leftover.launchagents", "title": "Launch agent", "pattern": "~/Library/LaunchAgents/*.plist", "tier": "review", "category": "apps", "kind": "leftover", "exclude": ["com.apple.*", "app.tidal.mac*"] }
+  ]
+}
