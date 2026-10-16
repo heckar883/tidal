@@ -1,0 +1,4 @@
+build/
+snap/
+screenshot-*.png
+.DS_Store
