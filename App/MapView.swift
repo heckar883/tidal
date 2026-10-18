@@ -68,7 +68,7 @@ struct MapScreen: View {
                 } else {
                     switch style {
                     case .pools:
-                        PoolMap(items: MapBuilder.visible(level, limit: 16), highlight: highlight, hovered: $hovered,
+                        PoolMap(items: MapBuilder.visible(level, limit: current?.id.hasPrefix("#more") == true ? .max : 16), highlight: highlight, hovered: $hovered,
                                 open: { item, at in open(item, from: at) },
                                 dive: { parent, child, at in
                                     zoom = at
