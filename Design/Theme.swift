@@ -178,8 +178,13 @@ struct RollingBytes: View {
     var duration: Double = 1.1
 
     var body: some View {
-        CountingBytes(value: Double(bytes), size: size, unitSize: unitSize, weight: weight, color: color)
-            .animation(.smooth(duration: duration), value: bytes)
+        // The final figure reserves the width, so counting never nudges the layout around it.
+        ZStack(alignment: .leading) {
+            CountingBytes(value: Double(bytes), size: size, unitSize: unitSize, weight: weight, color: color).hidden()
+            CountingBytes(value: Double(bytes), size: size, unitSize: unitSize, weight: weight, color: color)
+                .animation(.smooth(duration: duration), value: bytes)
+        }
+        .fixedSize()
             .accessibilityElement()
             .accessibilityLabel(ByteText.full(bytes))
     }

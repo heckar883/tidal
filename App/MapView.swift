@@ -91,7 +91,6 @@ struct MapScreen: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .animation(.smooth(duration: 0.18), value: hovered?.id)
             .animation(.spring(response: 0.6, dampingFraction: 0.88), value: levelKey)
 
             HStack(alignment: .bottom, spacing: 16) {
@@ -317,7 +316,7 @@ struct FocusPanel: View {
                     Text(item.path.map(TidalPaths.pretty) ?? item.note ?? item.category.title)
                         .font(.system(size: 11)).foregroundStyle(Theme.faint).lineLimit(1).truncationMode(.middle).frame(maxWidth: 280, alignment: .leading)
                 }
-                RollingBytes(bytes: item.bytes, size: 22, unitSize: 12, weight: .light)
+                CountingBytes(value: Double(item.bytes), size: 22, unitSize: 12, weight: .light, color: Theme.ink)
                 if cb > 0 && !item.locked {
                     Button {
                         if let p = item.path {

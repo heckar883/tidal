@@ -24,14 +24,14 @@ struct PoolMap: View {
                 ForEach(Array(pools.enumerated()), id: \.element.item.id) { i, p in
                     let anchor = UnitPoint(x: p.center.x / max(g.size.width, 1), y: p.center.y / max(g.size.height, 1))
                     PoolView(pool: p, hover: hovered?.id == p.item.id,
-                             dim: (hovered != nil && hovered?.id != p.item.id) || (highlight != nil && highlight != p.item.category),
+                             dim: highlight != nil && highlight != p.item.category,
                              shown: shown, index: i,
                              open: { open(p.item, anchor) }, dive: { c in dive(p.item, c, anchor) }, select: select)
                         .frame(width: p.r * 2, height: p.r * 2)
+                        .contentShape(.circle)
                         .position(p.center)
-                        .zIndex(hovered?.id == p.item.id ? 1 : 0)
                         .onHover { h in
-                            withAnimation(.smooth(duration: 0.22)) { hovered = h ? p.item : (hovered?.id == p.item.id ? nil : hovered) }
+                            withAnimation(.smooth(duration: 0.15)) { hovered = h ? p.item : (hovered?.id == p.item.id ? nil : hovered) }
                         }
                         .live { v in
                             v.contextMenu {
@@ -232,7 +232,7 @@ private struct PoolView: View {
         .frame(width: r * 2, height: r * 2)
         .contentShape(.circle)
         .onTapGesture { item.canOpen ? open() : select(item) }
-        .scaleEffect(shown ? (hover ? 1.025 : 1) : 0.4)
+        .scaleEffect(shown ? 1 : 0.4)
         .opacity(shown ? (dim ? 0.38 : 1) : 0)
         .shadow(color: tone.opacity(hover && dark ? 0.35 : 0), radius: 18)
         .animation(.spring(response: 0.75, dampingFraction: 0.8).delay(shown && !Motion.frozen ? 0 : Double(index) * 0.045), value: shown)
