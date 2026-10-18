@@ -4,7 +4,7 @@ import SwiftUI
 
 /// The always-on background service. Event-driven only: between FSEvents callbacks, workspace
 /// notifications and scheduler wake-ups it is asleep. It never polls and never draws animation loops.
-final class Agent: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class Agent: NSObject, NSApplicationDelegate, NSMenuDelegate, NSPopoverDelegate {
     let db = Database.shared
     lazy var engine = Engine(db: db)
     lazy var indexer = SpaceIndexer(db: db)
@@ -18,6 +18,8 @@ final class Agent: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var pendingUninstalls: [String: DispatchWorkItem] = [:]
     private var lastLowSpacePass = Date.distantPast
     private var card: UninstallPanel?
+    private var popover: NSPopover?
+    private let menu = NSMenu()
     private var busy = false { didSet { updateIcon() } }
 
     enum State: String { case idle, working, attention }
@@ -301,10 +303,30 @@ final class Agent: NSObject, NSApplicationDelegate, NSMenuDelegate {
         DispatchQueue.main.async { self.state = .working }
         db.set("agentFDA", Safety.hasFullDiskAccess() ? "1" : "0")
         let r = engine.pass(reason: reason, autopilot: autopilot)
+        if autopilot { systemPass() }
         db.set("lastPass", String(Date().timeIntervalSince1970))
         if r.clean.freed > 0 || !r.queued.isEmpty { notifyChanged("pass") }
         if r.found.isEmpty { db.log("scan", "\(reason): nothing to do", "") }
         DispatchQueue.main.async { self.refreshAttention() }
+    }
+
+    /// Password-free system data (temp folders, Homebrew leftovers, old firmware), at most once a day.
+    /// Anything that needs review or a password is left for the System data sheet.
+    private func systemPass() {
+        guard db.bool(SettingKey.autoSystem, default: true) else { return }
+        let last = db.double(SettingKey.lastSystemAuto, default: 0)
+        guard Date().timeIntervalSince1970 - last > 20 * 3600 else { return }
+        db.set(SettingKey.lastSystemAuto, String(Date().timeIntervalSince1970))
+        let results = SystemCleaner.runUnattended()
+        let freed = results.filter { $0.error == nil }.reduce(0) { $0 + $1.freed }
+        if freed > 0 {
+            let names = results.filter { $0.freed > 0 }.map(\.task.title).prefix(3).joined(separator: ", ")
+            db.log("purge", "System data cleaned: \(names)", "Automatic · permanent, not kept in holding", bytes: freed)
+            let total = Int64(db.get(SettingKey.freedTotal) ?? "0") ?? 0
+            db.set(SettingKey.freedTotal, String(total + freed))
+            notifyChanged("pass")
+        }
+        for f in results where f.error != nil { db.log("refuse", "\(f.task.title) was not cleaned", f.error ?? "") }
     }
 
     private func indexNow(dirty: Set<String>?) {
@@ -348,10 +370,76 @@ final class Agent: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        let menu = NSMenu()
         menu.delegate = self
-        statusItem.menu = menu
+        statusItem.button?.target = self
+        statusItem.button?.action = #selector(statusClicked)
+        statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         updateIcon()
+    }
+
+    /// Left click opens the popover; right click (or Control-click) shows the plain menu.
+    @objc private func statusClicked() {
+        let e = NSApp.currentEvent
+        if e?.type == .rightMouseUp || e?.modifierFlags.contains(.control) == true {
+            popover?.performClose(nil)
+            statusItem.menu = menu
+            statusItem.button?.performClick(nil)
+            statusItem.menu = nil
+            return
+        }
+        if let p = popover, p.isShown { p.performClose(nil); return }
+        showPopover()
+    }
+
+    /// The popover and its views exist only while it is open.
+    private func showPopover() {
+        guard let button = statusItem.button else { return }
+        let p = NSPopover()
+        p.behavior = .transient
+        p.animates = true
+        p.delegate = self
+        let data = PopoverData.load(db, state: state.rawValue)
+        let actions = PopoverActions(
+            open: { [weak self] in self?.popover?.performClose(nil); Agent.openInterface() },
+            setAutopilot: { [weak self] on in self?.setAutopilot(on) },
+            runPass: { [weak self] in self?.runPass(reason: "Manual pass") },
+            keep: { [weak self] u in self?.keep(u) },
+            drain: { [weak self] u in self?.drain(u) },
+            review: { [weak self] in self?.popover?.performClose(nil); Agent.openInterface(screen: "now") },
+            quit: { [weak self] in self?.quit() })
+        let host = NSHostingController(rootView: PopoverView(data: data, actions: actions))
+        host.sizingOptions = [.preferredContentSize]
+        p.contentViewController = host
+        popover = p
+        p.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        p.contentViewController?.view.window?.makeKey()
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        popover?.contentViewController = nil
+        popover = nil
+    }
+
+    private func setAutopilot(_ on: Bool) {
+        db.setBool(SettingKey.autopilot, on)
+        db.log("note", on ? "Autopilot turned on" : "Switched to Manual", "From the menu bar")
+        notifyChanged("settings")
+    }
+
+    private func keep(_ event: UninstallEvent) {
+        var e = event; e.state = "kept"; db.save(e)
+        db.log("note", "Kept \(event.name)'s leftovers", "")
+        notifyChanged("uninstall"); refreshAttention()
+    }
+
+    private func drain(_ event: UninstallEvent) {
+        work.async {
+            let r = self.engine.clean(event.leftovers, reason: "\(event.name) leftovers", uninstallContext: true)
+            var e = event; e.state = "cleaned"; e.autoCleaned += r.freed; e.leftovers = []
+            self.db.save(e)
+            self.notifyChanged("uninstall")
+            DispatchQueue.main.async { self.refreshAttention() }
+        }
     }
 
     private func updateIcon() {
@@ -403,11 +491,7 @@ final class Agent: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func openApp() { Agent.openInterface() }
-    @objc func toggleAutopilot() {
-        db.setBool(SettingKey.autopilot, !autopilot)
-        db.log("note", autopilot ? "Autopilot turned on" : "Switched to Manual", "From the menu bar")
-        notifyChanged("settings")
-    }
+    @objc func toggleAutopilot() { setAutopilot(!autopilot) }
     @objc func passFromMenu() { runPass(reason: "Manual pass") }
     /// Quitting must stick: take the job out of launchd first, otherwise it is restarted.
     @objc func quit() {
@@ -433,22 +517,12 @@ final class Agent: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func showCard(_ event: UninstallEvent, appIcon: NSImage?) {
         card?.close()
-        card = UninstallPanel(event: event, icon: appIcon) { [weak self] action in
+        card = UninstallPanel(event: event, icon: appIcon, holdDays: Int(db.double(SettingKey.holdDays, default: 14))) { [weak self] action in
             guard let self else { return }
             switch action {
             case .review: Agent.openInterface(screen: "now")
-            case .keep:
-                var e = event; e.state = "kept"; self.db.save(e)
-                self.db.log("note", "Kept \(event.name)'s leftovers", "")
-                self.notifyChanged("uninstall"); self.refreshAttention()
-            case .clean:
-                self.work.async {
-                    let r = self.engine.clean(event.leftovers, reason: "\(event.name) leftovers", uninstallContext: true)
-                    var e = event; e.state = "cleaned"; e.autoCleaned += r.freed; e.leftovers = []
-                    self.db.save(e)
-                    self.notifyChanged("uninstall")
-                    DispatchQueue.main.async { self.refreshAttention() }
-                }
+            case .keep: self.keep(event)
+            case .clean: self.drain(event)
             }
             self.card = nil
         }

@@ -117,6 +117,11 @@ enum SelfTest {
         let scan = SystemCleaner.scan()
         for t in scan.tasks { print("    \(t.admin ? "admin" : "user ") \(Fmt.bytes(t.bytes).padding(toLength: 9, withPad: " ", startingAt: 0)) \(t.title)") }
         check(scan.tasks.allSatisfy { !$0.shell.isEmpty }, "scan produced \(scan.tasks.count) tasks")
+        for t in scan.tasks.filter(\.unattended) {
+            let (code, _) = SystemCleaner.sh(t.dryShell)
+            check(code == 0, "dry run of \(t.title) lists without deleting")
+        }
+        check(scan.tasks.filter(\.unattended).allSatisfy { !$0.dryShell.contains("rm -rf") }, "dry runs never delete")
 
         print("purge")
         let before = db.held().count

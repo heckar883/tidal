@@ -32,22 +32,20 @@ final class SystemCleanModel {
         let chosen = tasks.filter { picked.contains($0.id) }
         guard !chosen.isEmpty else { return }
         running = true
-        let before = VolumeInfo.current().available
         DispatchQueue.global(qos: .utility).async {
             let r = SystemCleaner.run(chosen)
-            let after = VolumeInfo.current().available
             Task { @MainActor in
                 self.running = false
-                let measured = r.ok.reduce(0) { $0 + $1.bytes }
-                let gained = max(0, after - before)
-                let freed = max(measured, gained)
-                if !r.ok.isEmpty {
-                    store.db.log("purge", "System data cleaned: \(r.ok.map(\.title).prefix(3).joined(separator: ", "))", "Permanent — not kept in holding", bytes: freed)
+                let ok = r.filter { $0.error == nil }
+                let failed = r.filter { $0.error != nil }
+                let freed = ok.reduce(0) { $0 + $1.freed }
+                if freed > 0 {
+                    store.db.log("purge", "System data cleaned: \(ok.filter { $0.freed > 0 }.map(\.task.title).prefix(3).joined(separator: ", "))", "Permanent — not kept in holding", bytes: freed)
                     let total = Int64(store.db.get(SettingKey.freedTotal) ?? "0") ?? 0
                     store.db.set(SettingKey.freedTotal, String(total + freed))
                 }
-                if let f = r.failed.first { store.db.log("refuse", "\(f.0.title) was not cleaned", f.1) }
-                self.result = r.failed.isEmpty ? "\(Fmt.bytes(freed)) cleaned" : (r.ok.isEmpty ? "Nothing cleaned — \(r.failed[0].1)" : "\(Fmt.bytes(freed)) cleaned, \(r.failed.count) skipped")
+                if let f = failed.first { store.db.log("refuse", "\(f.task.title) was not cleaned", f.error ?? "") }
+                self.result = failed.isEmpty ? "\(Fmt.bytes(freed)) cleaned" : (ok.isEmpty ? "Nothing cleaned — \(failed[0].error ?? "")" : "\(Fmt.bytes(freed)) cleaned, \(failed.count) skipped")
                 store.reloadFromDisk(nodesToo: false)
                 store.volume = VolumeInfo.current()
                 store.reindex()

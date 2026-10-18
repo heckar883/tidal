@@ -15,14 +15,17 @@ enum Grouping: String, CaseIterable, Identifiable {
 }
 
 enum MapStyle: String, CaseIterable, Identifiable {
-    case bubbles, ribbons, strata, list
+    case pools, list
     var id: String { rawValue }
-    var title: String { rawValue.capitalized }
+    var title: String {
+        switch self {
+        case .pools: "Tidepools"
+        case .list: "List"
+        }
+    }
     var symbol: String {
         switch self {
-        case .bubbles: "circle.circle"
-        case .ribbons: "line.3.horizontal.decrease"
-        case .strata: "square.stack.3d.down.forward"
+        case .pools: "circle.circle"
         case .list: "list.bullet"
         }
     }

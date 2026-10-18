@@ -202,6 +202,9 @@ enum SettingKey {
     static let autopilot = "autopilot"
     /// Apps dragged to the Trash are uninstalled completely, without waiting for Autopilot. On by default.
     static let autoUninstall = "autoUninstall"
+    /// Autopilot also clears password-free system data (temp folders, Homebrew leftovers, old firmware). On by default.
+    static let autoSystem = "autoSystem"
+    static let lastSystemAuto = "lastSystemAuto"
     static let holdDays = "holdDays"
     static let freeThresholdGB = "freeThresholdGB"
     static let lastEventID = "lastEventID"

@@ -10,13 +10,18 @@ enum Place: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .now: "drop"
-        case .map: "circle.hexagongrid"
+        case .map: "square.stack.3d.down.forward"
         case .activity: "clock"
         }
     }
 }
 
 enum ItemPhase: Equatable { case arriving, assessing, ready, lifting, gone }
+
+/// What the main screen is showing, at the broadest level.
+enum Condition: String {
+    case firstRun = "firstrun", scanning, clear = "empty", error, items
+}
 
 enum AgentHealth: Equatable {
     case running, needsApproval, notRunning, unknown
@@ -36,6 +41,8 @@ final class Store {
     // Navigation
     var place: Place = .now
     var showSettings = false
+    /// A layer clicked in the Now column, for the map to open.
+    var mapRequest: String?
 
     // Disk
     var volume = VolumeInfo.current()
@@ -53,7 +60,9 @@ final class Store {
     var uninstalls: [UninstallEvent] = []
 
     // Map
-    var nodes: [IndexNode] = []
+    var nodes: [IndexNode] = [] { didSet { rebuildStrata() } }
+    /// Used space by category, for the sounding column.
+    var strata: [Stratum] = []
     var indexing = false
     var indexProgress = ""
 
@@ -69,6 +78,11 @@ final class Store {
     var holdDays: Double = 14
     var windowVisible = true
     var toast: String?
+    var onboarded = true
+    /// Bumped as a clean starts, so the list can play the outgoing tide.
+    var tideAt = Date.distantPast
+    /// Design QA: `TIDAL_STATE=firstrun|scanning|empty|error` pins the main screen to one state.
+    let forced = ProcessInfo.processInfo.environment["TIDAL_STATE"].flatMap(Condition.init(rawValue:))
 
     let db = Database.shared
     let engine = Engine()
@@ -81,6 +95,7 @@ final class Store {
     init() {
         autopilot = db.bool(SettingKey.autopilot, default: false)
         holdDays = db.double(SettingKey.holdDays, default: 14)
+        onboarded = db.get("onboarded") == "1" || db.get("indexComplete") == "1" || db.get("lastCandidates") != nil
         for c in SpaceCategory.allCases { policies[c] = db.policy(c) }
         // Assemble from the previous state, never from blank.
         if let json = db.get("lastCandidates"), let prev = try? JSONDecoder().decode([Candidate].self, from: Data(json.utf8)) {
@@ -248,6 +263,7 @@ final class Store {
     func reloadFromDisk(nodesToo: Bool = true) {
         activity = db.activity()
         held = db.held()
+        defer { rebuildStrata() }
         uninstalls = db.uninstalls()
         freedTotal = Int64(db.get(SettingKey.freedTotal) ?? "0") ?? 0
         autopilot = db.bool(SettingKey.autopilot, default: false)
@@ -259,6 +275,40 @@ final class Store {
         }
         if nodesToo { nodes = indexer.nodes() }
         refreshAgentHealth()
+    }
+
+    // MARK: state
+
+    var visibleCandidates: [Candidate] { candidates.filter { !leftoverPaths.contains($0.path) } }
+
+    var condition: Condition {
+        if let forced { return forced }
+        if !onboarded { return .firstRun }
+        if agentHealth == .notRunning { return .error }
+        if visibleCandidates.isEmpty && pendingUninstalls.isEmpty { return discovering ? .scanning : .clear }
+        return .items
+    }
+
+    var scanning: Bool { forced == .scanning || forced == .firstRun || (forced == nil && (discovering || indexing)) }
+
+    func finishOnboarding(autopilot on: Bool) {
+        if !readOnly { db.set("onboarded", "1") }
+        withAnimation(.smooth(duration: 0.8)) { onboarded = true }
+        if on != autopilot { setAutopilot(on) }
+    }
+
+    private func rebuildStrata() {
+        let items = MapBuilder.build(.categories, nodes: nodes, volume: volume, db: db)
+        var s = items.map { Stratum(id: $0.id, name: $0.name, bytes: $0.bytes, category: $0.category, dashed: $0.category == .purgeable) }
+        let held = heldBytes
+        if held > 0 {
+            // Held items still occupy the disk; they wait at the drain instead of in their old layer.
+            if let i = s.indices.max(by: { s[$0].bytes < s[$1].bytes }) {
+                s[i] = Stratum(id: s[i].id, name: s[i].name, bytes: max(0, s[i].bytes - held), category: s[i].category, dashed: s[i].dashed)
+            }
+            s.append(Stratum(id: "holding", name: "In holding", bytes: held, category: .other, holding: true))
+        }
+        strata = s.filter { $0.bytes > 0 }
     }
 
     // MARK: discovery (dry run)
@@ -346,6 +396,7 @@ final class Store {
     func clean(_ items: [Candidate], reason: String, origins: [String: CGRect] = [:], uninstallContext: Bool = false, chosen: Bool = false) {
         let items = items.filter { phases[$0.id] != .lifting && phases[$0.id] != .gone }
         guard !items.isEmpty, !readOnly else { return }
+        tideAt = Date()
         for (i, c) in items.enumerated() {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.07) {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) { self.phases[c.id] = .lifting }

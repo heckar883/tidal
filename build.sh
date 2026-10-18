@@ -1,7 +1,7 @@
 #!/bin/zsh
 # Builds Tidal.app (interface + embedded agent) and optionally installs it.
 #   ./build.sh            build into ./build
-#   ./build.sh install    build, then copy to /Applications
+#   ./build.sh install    build, then copy to /Applications (or $TIDAL_DEST)
 # Set DEVELOPER_DIR to pick a specific Xcode, e.g. DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer ./build.sh
 set -euo pipefail
 cd "${0:A:h}"
@@ -15,9 +15,9 @@ rm -rf $APP
 mkdir -p $APP/Contents/{MacOS,Resources} $AGENT/Contents/{MacOS,Resources}
 
 echo "› agent"
-$SWIFTC -o $AGENT/Contents/MacOS/TidalAgent Shared/*.swift Agent/*.swift
+$SWIFTC -o $AGENT/Contents/MacOS/TidalAgent Shared/*.swift Design/*.swift Agent/*.swift
 echo "› interface"
-$SWIFTC -o $APP/Contents/MacOS/Tidal Shared/*.swift App/*.swift
+$SWIFTC -o $APP/Contents/MacOS/Tidal Shared/*.swift Design/*.swift App/*.swift
 
 cp Resources/catalog.json $APP/Contents/Resources/
 cp Resources/0vyx-logo.png $APP/Contents/Resources/
@@ -40,7 +40,7 @@ codesign --force --options runtime --sign - --identifier app.tidal.mac $APP
 codesign --verify --strict $APP && echo "  signature ok"
 
 if [[ "${1:-}" == "install" ]]; then
-  DEST=/Applications
+  DEST=${TIDAL_DEST:-/Applications}
   [[ -d $DEST ]] || { echo "destination not found"; exit 1; }
   pkill -f "Tidal.app/Contents/MacOS/Tidal" 2>/dev/null || true
   rm -rf $DEST/Tidal.app

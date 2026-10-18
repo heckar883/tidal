@@ -1,5 +1,7 @@
 import SwiftUI
 
+/// Everything Tidal did, in plain words, logged like soundings down a single line.
+/// On the right, the holding pool: what has been released but can still come back.
 struct ActivityScreen: View {
     @Environment(Store.self) private var store
     @State private var confirmEmpty = false
@@ -11,9 +13,8 @@ struct ActivityScreen: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 22) {
-            // Timeline
-            ScrollView {
+        HStack(alignment: .top, spacing: 26) {
+            Scroll {
                 VStack(alignment: .leading, spacing: 26) {
                     HStack(alignment: .firstTextBaseline) {
                         Text("Activity").font(.system(size: 24, weight: .semibold)).foregroundStyle(Theme.ink)
@@ -22,13 +23,23 @@ struct ActivityScreen: View {
                         Button { NSWorkspace.shared.open(TidalPaths.log) } label: { Label("Open Log File", systemImage: "doc.text") }
                             .buttonStyle(.glass).controlSize(.small)
                     }
+                    TideChart(entries: store.activity)
                     if store.activity.isEmpty {
-                        Text("Nothing has happened yet.").font(.system(size: 13)).foregroundStyle(Theme.mist).padding(.top, 30)
+                        Text("Nothing has happened yet. Tidal sleeps until something changes.")
+                            .font(.system(size: 13)).foregroundStyle(Theme.mist).padding(.top, 10)
                     }
                     ForEach(days, id: \.0) { day, entries in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(day.formatted(.dateTime.weekday(.wide).day().month(.wide))).sectionLabel().padding(.bottom, 8)
-                            ForEach(entries) { e in ActivityRow(entry: e) }
+                        VStack(alignment: .leading, spacing: 0) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(day.formatted(.dateTime.weekday(.wide).day().month(.wide))).sectionLabel()
+                                Spacer()
+                                let freed = entries.filter { $0.kind == "clean" }.reduce(0) { $0 + $1.bytes }
+                                if freed > 0 { Text("\(ByteText.full(freed)) released").font(Theme.figure(11, .regular)).foregroundStyle(Theme.faint) }
+                            }
+                            .padding(.bottom, 10)
+                            ForEach(Array(entries.enumerated()), id: \.element.id) { i, e in
+                                ActivityRow(entry: e, last: i == entries.count - 1)
+                            }
                         }
                     }
                 }
@@ -38,50 +49,131 @@ struct ActivityScreen: View {
             .frame(maxWidth: .infinity)
 
             HoldingPanel(confirmEmpty: $confirmEmpty)
-                .frame(width: 400)
+                .frame(width: 380)
                 .padding(.trailing, 28).padding(.vertical, 22)
         }
         .confirmationDialog("Empty the holding area?", isPresented: $confirmEmpty) {
-            Button("Empty and Reclaim \(Fmt.bytes(store.heldBytes))", role: .destructive) { store.emptyHolding() }
+            Button("Empty and Reclaim \(ByteText.full(store.heldBytes))", role: .destructive) { store.emptyHolding() }
         } message: {
             Text("Held items are deleted for good. This is the only step in Tidal that can't be undone.")
         }
     }
 }
 
-struct ActivityRow: View {
-    let entry: ActivityEntry
-    @Environment(Store.self) private var store
+/// Fourteen days of releases as one soft tide line.
+struct TideChart: View {
+    let entries: [ActivityEntry]
+    @State private var drawn = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    var symbol: (String, Color) {
-        switch entry.kind {
-        case "clean": ("drop.fill", Theme.tide)
-        case "restore": ("arrow.uturn.backward", Theme.color(.backups))
-        case "purge": ("sparkles", Theme.color(.purgeable))
-        case "uninstall": ("app.dashed", Theme.tierColor(.review))
-        case "refuse": ("hand.raised", Theme.faint)
-        case "scan": ("magnifyingglass", Theme.faint)
-        default: ("circle.fill", Theme.faint)
+    private var series: [(Date, Int64)] {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let byDay = Dictionary(grouping: entries.filter { $0.kind == "clean" }) { cal.startOfDay(for: $0.at) }.mapValues { $0.reduce(0) { $0 + $1.bytes } }
+        return (0..<14).reversed().map { d in
+            let day = cal.date(byAdding: .day, value: -d, to: today)!
+            return (day, byDay[day] ?? 0)
         }
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(spacing: 0) {
-                Image(systemName: symbol.0).font(.system(size: 10.5, weight: .semibold)).foregroundStyle(symbol.1)
-                    .frame(width: 26, height: 26).background(symbol.1.opacity(0.12), in: .circle)
-                Rectangle().fill(.white.opacity(0.06)).frame(width: 1).frame(maxHeight: .infinity)
+        let s = series
+        let total = s.reduce(0) { $0 + $1.1 }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("Last two weeks").sectionLabel()
+                Spacer()
+                RollingBytes(bytes: total, size: 15, unitSize: 11, weight: .medium)
+                Text("released").font(.system(size: 11)).foregroundStyle(Theme.faint)
             }
+            GeometryReader { g in
+                let maxV = Double(max(s.map(\.1).max() ?? 1, 1))
+                let pts = s.enumerated().map { i, v in
+                    CGPoint(x: g.size.width * CGFloat(i) / CGFloat(max(s.count - 1, 1)),
+                            y: g.size.height - 4 - (g.size.height - 12) * CGFloat(sqrt(Double(v.1) / maxV)))
+                }
+                ZStack(alignment: .bottomLeading) {
+                    TideCurve(points: pts, closed: true).fill(LinearGradient(colors: [Theme.tide.opacity(0.28), Theme.tide.opacity(0.02)], startPoint: .top, endPoint: .bottom))
+                    TideCurve(points: pts, closed: false).trim(from: 0, to: drawn || reduceMotion || Motion.frozen ? 1 : 0)
+                        .stroke(Theme.tide, style: StrokeStyle(lineWidth: 1.4, lineCap: .round))
+                    ForEach(Array(pts.enumerated()), id: \.offset) { i, p in
+                        if s[i].1 > 0 {
+                            Circle().fill(Theme.tide).frame(width: 4, height: 4).position(p)
+                                .help("\(s[i].0.formatted(.dateTime.weekday().day())): \(ByteText.full(s[i].1))")
+                        }
+                    }
+                }
+                .mask(Rectangle().scaleEffect(x: drawn || reduceMotion || Motion.frozen ? 1 : 0, anchor: .leading))
+            }
+            .frame(height: 64)
+            HStack {
+                Text(s.first?.0.formatted(.dateTime.day().month()) ?? "")
+                Spacer()
+                Text("Today")
+            }
+            .font(.system(size: 10)).foregroundStyle(Theme.faint)
+        }
+        .onAppear { withAnimation(.smooth(duration: 1.4).delay(0.15)) { drawn = true } }
+    }
+}
+
+struct TideCurve: Shape {
+    let points: [CGPoint]
+    let closed: Bool
+
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        guard let first = points.first else { return p }
+        if closed { p.move(to: CGPoint(x: first.x, y: rect.maxY)); p.addLine(to: first) } else { p.move(to: first) }
+        for i in 1..<points.count {
+            let a = points[i - 1], b = points[i]
+            let mx = (a.x + b.x) / 2
+            p.addCurve(to: b, control1: CGPoint(x: mx, y: a.y), control2: CGPoint(x: mx, y: b.y))
+        }
+        if closed { p.addLine(to: CGPoint(x: points.last!.x, y: rect.maxY)); p.closeSubpath() }
+        return p
+    }
+}
+
+struct ActivityRow: View {
+    let entry: ActivityEntry
+    var last = false
+
+    var tint: Color {
+        switch entry.kind {
+        case "clean": Theme.tide
+        case "restore": Theme.color(.backups)
+        case "purge": Theme.glow
+        case "uninstall": Theme.amber
+        default: Theme.faint
+        }
+    }
+
+    /// Bigger releases leave a longer mark on the line.
+    private var tick: CGFloat {
+        guard entry.bytes > 0 else { return 4 }
+        return min(22, 6 + CGFloat(log2(Double(entry.bytes) / 1_048_576 + 1)) * 1.6)
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            Text(entry.at.formatted(date: .omitted, time: .shortened)).font(Theme.figure(10.5, .regular)).foregroundStyle(Theme.faint)
+                .frame(width: 60, alignment: .leading).padding(.top, 2)
+            ZStack(alignment: .topLeading) {
+                Rectangle().fill(Theme.hairline).frame(width: 1).frame(maxHeight: .infinity).padding(.top, last ? 0 : 0)
+                Capsule().fill(tint).frame(width: tick, height: 2).offset(x: 0, y: 8)
+                Circle().fill(tint).frame(width: 5, height: 5).offset(x: -2, y: 6.5)
+            }
+            .frame(width: 32, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.title).font(.system(size: 13, weight: entry.kind == "clean" || entry.kind == "uninstall" ? .semibold : .regular))
-                    .foregroundStyle(entry.kind == "refuse" || entry.kind == "scan" ? Theme.mist : Theme.ink)
+                    .foregroundStyle(entry.kind == "refuse" || entry.kind == "scan" || entry.kind == "note" ? Theme.mist : Theme.ink)
                 if !entry.detail.isEmpty { Text(entry.detail).font(.system(size: 11.5)).foregroundStyle(Theme.mist).lineLimit(2) }
             }
-            .padding(.bottom, 14)
-            Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                if entry.bytes > 0 { Text(Fmt.bytes(entry.bytes)).font(Theme.figure(13, .semibold)).foregroundStyle(entry.kind == "clean" ? Theme.tide : Theme.ink) }
-                Text(entry.at.formatted(date: .omitted, time: .shortened)).font(.system(size: 10.5)).foregroundStyle(Theme.faint)
+            .padding(.bottom, 16)
+            Spacer(minLength: 12)
+            if entry.bytes > 0 {
+                Text(ByteText.full(entry.bytes)).font(Theme.figure(12.5, .semibold)).foregroundStyle(entry.kind == "clean" ? Theme.tide : Theme.ink)
             }
         }
     }
@@ -98,22 +190,22 @@ struct HoldingPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Holding area").sectionLabel()
-                RollingBytes(bytes: store.heldBytes, size: 46, unitSize: 18)
-                Text(store.held.isEmpty ? "Cleaned items wait here before they're gone for good."
-                                        : "\(store.held.count) item\(store.held.count == 1 ? "" : "s") · restorable for \(Int(store.holdDays)) days, then purged automatically")
+                Text("Holding").sectionLabel()
+                RollingBytes(bytes: store.heldBytes, size: 44, unitSize: 17)
+                Text(store.held.isEmpty ? "Released items wait here before they're gone for good."
+                                        : "\(store.held.count) item\(store.held.count == 1 ? "" : "s") · restorable for \(Int(store.holdDays)) days, then they drain away")
                     .font(.system(size: 11.5)).foregroundStyle(Theme.mist)
             }
             if !store.held.isEmpty {
-                Button { confirmEmpty = true } label: { Label("Empty Now", systemImage: "sparkles") }
+                Button { confirmEmpty = true } label: { Label("Drain Now", systemImage: "arrow.down.to.line") }
                     .buttonStyle(.glass)
                     .help("Reclaim the space immediately")
             }
-            Divider().overlay(.white.opacity(0.06))
-            ScrollView {
+            Rectangle().fill(Theme.hairline).frame(height: 0.5)
+            Scroll {
                 VStack(alignment: .leading, spacing: 16) {
                     ForEach(batches, id: \.0) { batch, items in
-                        VStack(alignment: .leading, spacing: 6) {
+                        VStack(alignment: .leading, spacing: 4) {
                             HStack {
                                 Text((items.first?.heldAt ?? Date()).formatted(.relative(presentation: .named))).font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.faint)
                                 Spacer()
@@ -153,14 +245,14 @@ struct HeldRow: View {
                 Button("Restore") { store.restore(item) }.buttonStyle(.glass).controlSize(.small).transition(.opacity)
             } else {
                 VStack(alignment: .trailing, spacing: 1) {
-                    Text(Fmt.bytes(item.bytes)).font(Theme.figure(12)).foregroundStyle(Theme.ink)
+                    Text(ByteText.full(item.bytes)).font(Theme.figure(12)).foregroundStyle(Theme.ink)
                     Text("\(left)d left").font(.system(size: 10)).foregroundStyle(Theme.faint)
                 }
                 .transition(.opacity)
             }
         }
         .padding(.horizontal, 10).padding(.vertical, 7)
-        .background(.white.opacity(hover ? 0.05 : 0.0), in: .rect(cornerRadius: 12))
+        .background(hover ? Theme.wash : .clear, in: .rect(cornerRadius: 12))
         .onHover { h in withAnimation(.smooth(duration: 0.15)) { hover = h } }
     }
 }

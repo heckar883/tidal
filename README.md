@@ -22,10 +22,10 @@
 
 ## Why Tidal
 
-- **Nothing is deleted straight away.** Cleaned items go to a *holding area* and stay restorable for 14 days. Made a mistake? One click on **Undo**.
+- **Nothing is deleted straight away.** Cleaned items go to a *holding area* and stay restorable for 14 days, then released for good. Made a mistake? One click on **Undo**.
 - **Safe vs Review.** *Safe* is stuff that regenerates on its own (app caches, logs, package manager downloads). *Review* is probably removable, but personal or costly to rebuild (like old Xcode archives), so it's your call.
-- **Autopilot.** Turn it on and Tidal cleans Safe items as they appear. A background agent keeps working while the app is closed.
-- **See where your disk went.** The **Map** is an interactive bubble chart of everything using your space.
+- **Autopilot.** Turn it on and Tidal cleans Safe items as they appear, plus password-free system data like temp folders and Homebrew leftovers. A background agent keeps working while the app is closed.
+- **See where your disk went.** The **Map** shows everything using your space as tidepools: pools sized by how much they hold, with the contents of each resting inside. Click one to sink in, or switch to a plain list.
 - **Everything is logged in plain words.** The **Activity** screen shows every action Tidal took.
 - **A hard "never touch" list.** Some locations are blocked outright, including Tidal's own data.
 - **Native and tiny.** Pure Swift and SwiftUI, no dependencies, no accounts, no telemetry.
