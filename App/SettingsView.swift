@@ -8,6 +8,7 @@ struct SettingsView: View {
     @State private var threshold: Double = 20
     @State private var autoUninstall = true
     @State private var autoSystem = true
+    @State private var updater = Updater()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -74,6 +75,24 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    LabeledContent("Tidal \(Updater.current)") {
+                        HStack(spacing: 10) {
+                            switch updater.state {
+                            case .idle: EmptyView()
+                            case .checking: ProgressView().controlSize(.small)
+                            case .current: Label("Up to date", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.tide)
+                            case .failed(let m): Text(m).foregroundStyle(.secondary)
+                            case .available(let v, let url):
+                                Button("Download \(v)") { NSWorkspace.shared.open(url) }.buttonStyle(.glassProminent).tint(Theme.tide)
+                            }
+                            Button("Check for Updates") { updater.check() }.disabled(updater.state == .checking)
+                        }
+                    }
+                } header: { Text("Updates") } footer: {
+                    Text("Checks GitHub only when you ask. Downloading opens the newest Tidal.zip; replace the app in Applications and open it.")
+                }
+
+                Section {
                     status(store.agentHealth == .running, store.agentHealth.title)
                     status(store.hasFDA, store.hasFDA ? "Full Disk Access granted to Tidal" : "Tidal has no Full Disk Access (reduced mode)")
                     if store.agentHealth == .running {
@@ -102,7 +121,7 @@ struct SettingsView: View {
             }
             .padding(.bottom, 16)
         }
-        .frame(width: 620, height: 720)
+        .frame(width: 620, height: 780)
         .onAppear {
             threshold = store.db.double(SettingKey.freeThresholdGB, default: 20)
             autoUninstall = store.db.bool(SettingKey.autoUninstall, default: true)

@@ -60,7 +60,7 @@ enum Snapshot {
         }
         at(3.5) { capture(mainWindow, to: "\(dir)/activity\(suffix).png") }
 
-        at(0.3) { show(SettingsView().environment(store), size: NSSize(width: 620, height: 720), backdrop: false) }
+        at(0.3) { show(SettingsView().environment(store), size: NSSize(width: 620, height: 780), backdrop: false) }
         at(2.5) { capture(aux, to: "\(dir)/settings\(suffix).png"); closeAux() }
 
         at(0.3) {
